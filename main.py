@@ -7,39 +7,13 @@ from agents import (
     Runner,
     TResponseInputItem,
     input_guardrail,
+    ModelSettings,
 )
 from openai.types.responses import ResponseTextDeltaEvent
 import asyncio
 from configuration import config
 from tools import UserContext, search_book, check_availability
-
-
-class LibraryQueryCheck(BaseModel):
-    is_library_related: bool
-    reasoning: str
-
-
-guardrail_agent = Agent(
-    name="Library Guardrail Agent",
-    instructions="Check if the user's query is related to library tasks "
-                 "(like searching books, availability, timings).",
-    output_type=LibraryQueryCheck,
-)
-
-
-@input_guardrail
-async def library_guardrail(
-    ctx: RunContextWrapper[UserContext],
-    agent: Agent,
-    input: str | list[TResponseInputItem],
-) -> GuardrailFunctionOutput:
-    result = await Runner.run(guardrail_agent, input, context=ctx.context, run_config=config)
-
-    return GuardrailFunctionOutput(
-        output_info=result.final_output,
-        tripwire_triggered=not result.final_output.is_library_related,
-    )
-
+from guardrails import library_guardrail
 
 def dynamic_instructions(wrapper: RunContextWrapper[UserContext], agent=Agent[UserContext]):
     user = wrapper.context
@@ -50,6 +24,11 @@ library_agent = Agent[UserContext](
     instructions=dynamic_instructions,
     tools=[search_book, check_availability],
     input_guardrails=[library_guardrail],
+    model_settings=ModelSettings(
+        temperature=0.1,
+        tool_choice="required",
+        max_tokens=100,
+    )
 )
 
 async def main():
